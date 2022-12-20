@@ -48,6 +48,7 @@ Future<DriftIsolate> _createDriftIsolate() async {
   // background isolate about the path.
   final directory = (await getApplicationDocumentsDirectory()).path;
   String path = p.join(directory, 'db.sqlite');
+  print('Using DB path: $path');
   final receivePort = ReceivePort();
 
   await Isolate.spawn(

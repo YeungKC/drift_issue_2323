@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:drift_issue_2180/database.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -6,6 +8,8 @@ void main() {
   runApp(const ProviderScope(
     child: MyApp(),
   ));
+
+  startBackgroundSync();
 }
 
 class MyApp extends StatelessWidget {
@@ -120,4 +124,45 @@ class ApplicationState with ChangeNotifier {
       notifyListeners();
     });
   }
+}
+
+Future<void> startBackgroundSync() async {
+  getDB();
+  final db = getDB();
+  await db.select(db.records).get();
+  StartBackgroundSyncArgs args =
+      StartBackgroundSyncArgs(toDbIsolatePort: dbIsolateConnectPort!);
+  Isolate.spawn(
+    spawnIsolateAndSync,
+    args,
+    debugName: 'Background Sync',
+  );
+}
+
+class StartBackgroundSyncArgs {
+  /// Port to connect to the existing db isolate
+  final SendPort toDbIsolatePort;
+
+  StartBackgroundSyncArgs({required this.toDbIsolatePort});
+}
+
+Future<void> spawnIsolateAndSync(StartBackgroundSyncArgs syncArgs) async {
+  print("Spawned background sync isolate");
+
+  // connect to the db using existing db isolate port
+  final db = getDB(existingDbIsolatePort: syncArgs.toDbIsolatePort);
+
+  int id = 1;
+  while (true) {
+    await db.batch((batch) {
+      batch.insertAll(db.records, [
+        Record(id: id, title: 'Title', content: 'Content'),
+      ]);
+    });
+
+    id += 1;
+  }
+
+  // completed background sync, dispose and cleanup all the things
+  // Isolate.current.kill();
 }
