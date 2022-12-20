@@ -1,3 +1,4 @@
+import 'package:drift_issue_2180/database.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -111,5 +112,12 @@ class ApplicationState with ChangeNotifier {
     _observeRecords();
   }
 
-  void _observeRecords() {}
+  void _observeRecords() {
+    final db = getDB();
+    final query = db.select(db.records);
+    query.watch().listen((records) {
+      numRecords = records.length;
+      notifyListeners();
+    });
+  }
 }
