@@ -129,6 +129,7 @@ class ApplicationState with ChangeNotifier {
 Future<void> startBackgroundSync() async {
   getDB();
   final db = getDB();
+  // Query the DB to make sure dbIsolateConnectPort is initialized
   await db.select(db.records).get();
   StartBackgroundSyncArgs args =
       StartBackgroundSyncArgs(toDbIsolatePort: dbIsolateConnectPort!);
