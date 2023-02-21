@@ -1,15 +1,33 @@
 import 'dart:isolate';
 
+import 'package:drift/drift.dart' as drift;
 import 'package:drift_issue_2180/database.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  drift.driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  await connectToDatabase(fromMainIsolate: true);
+
   runApp(const ProviderScope(
     child: MyApp(),
   ));
 
-  startBackgroundSync();
+  Isolate.spawn((_) async {
+    final db = await connectToDatabase();
+
+    while (true) {
+      print('inserting records...');
+
+      await db
+          .into(db.records)
+          .insert(RecordsCompanion.insert(title: 'title', content: 'content'));
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+  }, null);
 }
 
 class MyApp extends StatelessWidget {
@@ -97,7 +115,7 @@ class _MyHomePageState extends ConsumerState<MyHomePage> {
             ),
             Text(
               '${state.numRecords}',
-              style: Theme.of(context).textTheme.headline4,
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
           ],
         ),
@@ -116,54 +134,15 @@ class ApplicationState with ChangeNotifier {
     _observeRecords();
   }
 
-  void _observeRecords() {
-    final db = getDB();
+  Future<void> _observeRecords() async {
+    final db = await connectToDatabase();
+
     final query = db.select(db.records);
     query.watch().listen((records) {
+      print("fuck Records: ${records.length}");
+
       numRecords = records.length;
       notifyListeners();
     });
   }
-}
-
-Future<void> startBackgroundSync() async {
-  getDB();
-  final db = getDB();
-  // Query the DB to make sure dbIsolateConnectPort is initialized
-  await db.select(db.records).get();
-  StartBackgroundSyncArgs args =
-      StartBackgroundSyncArgs(toDbIsolatePort: dbIsolateConnectPort!);
-  Isolate.spawn(
-    spawnIsolateAndSync,
-    args,
-    debugName: 'Background Sync',
-  );
-}
-
-class StartBackgroundSyncArgs {
-  /// Port to connect to the existing db isolate
-  final SendPort toDbIsolatePort;
-
-  StartBackgroundSyncArgs({required this.toDbIsolatePort});
-}
-
-Future<void> spawnIsolateAndSync(StartBackgroundSyncArgs syncArgs) async {
-  print("Spawned background sync isolate");
-
-  // connect to the db using existing db isolate port
-  final db = getDB(existingDbIsolatePort: syncArgs.toDbIsolatePort);
-
-  int id = 1;
-  while (true) {
-    await db.batch((batch) {
-      batch.insertAll(db.records, [
-        Record(id: id, title: 'Title', content: 'Content'),
-      ]);
-    });
-
-    id += 1;
-  }
-
-  // completed background sync, dispose and cleanup all the things
-  // Isolate.current.kill();
 }
